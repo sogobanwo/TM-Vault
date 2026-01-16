@@ -72,7 +72,12 @@ export default function ConfettiAnimation() {
             left: particle.x,
             top: particle.y,
             opacity: particle.opacity,
-            transform: [{ rotate: particle.rotation }],
+            transform: [{
+              rotate: particle.rotation.interpolate({
+                inputRange: [0, 360],
+                outputRange: ["0deg", "360deg"],
+              }),
+            }],
           }}
         >
           <View className="w-2 h-2 bg-yellow-400 rounded-full" />

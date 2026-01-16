@@ -1,27 +1,54 @@
 import { useAppKit } from "@reown/appkit-react-native"
 import * as Haptics from "expo-haptics"
-import React, { useState } from "react"
+import React, { useEffect } from "react" // Removed useState
 import { Text, TouchableOpacity, View } from "react-native"
 import { parseUnits } from "viem"
 
 import { useToast } from "../contexts/ToastContext"
-import { useWalletKit } from "../contexts/WalletKitContext" // Still used for getting address/balance via the bridge
+import { useWalletKit } from "../contexts/WalletKitContext"
+import { useMintUSDC, useUSDCBalance } from "../hooks/useMockUSDC" // Import hooks
 import { formatAddress, formatCurrency, fromBigInt } from "../utils/formatters"
+import { formatError } from "../utils/errorFormatter"
 
 export default function WalletSection() {
   const { open } = useAppKit()
   const { address, isConnected, disconnect } = useWalletKit()
-  const [balance, setBalance] = useState<bigint>(0n) // Mock balance
+  const { balance } = useUSDCBalance(address as `0x${string}`) // distinct from local state
+  const { mint, isPending, isConfirmed, error: mintError } = useMintUSDC()
 
   const { showToast } = useToast()
 
+  // Handle mint transaction status
+  useEffect(() => {
+    if (isPending) {
+      showToast("Minting 1000 USDC...", "info")
+    }
+  }, [isPending])
+
+  useEffect(() => {
+    if (isConfirmed) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      showToast("Minted 1000 USDC successfully!", "success")
+    }
+  }, [isConfirmed])
+
+  useEffect(() => {
+    if (mintError) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      showToast(`Minting failed: ${formatError(mintError)}`, "error")
+    }
+  }, [mintError])
+
+
   const handleMint = async () => {
+    if (!address) return
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-    showToast("Minting 1000 USDC...", "success")
-    setTimeout(() => {
-      setBalance(prev => prev + parseUnits("1000", 6))
-      showToast("Minted!", "success")
-    }, 1000)
+    try {
+      mint(address as `0x${string}`, parseUnits("1000", 6))
+    } catch (e) {
+      // Error handling is managed by the hook state usually, but catching synchronous errors safe
+      console.error("Mint trigger error:", e)
+    }
   }
 
   const handleDisconnect = async () => {
@@ -42,9 +69,9 @@ export default function WalletSection() {
         </Text>
         <TouchableOpacity
           onPress={handleConnectWallet}
-          className="bg-blue-600 px-6 py-3 rounded-full"
+          className="bg-yellow-500 dark:bg-yellow-400 px-6 py-3 rounded-full"
         >
-          <Text className="text-white font-bold">Connect Wallet</Text>
+          <Text className="text-white dark:text-black font-bold">Connect Wallet</Text>
         </TouchableOpacity>
       </View>
     )
@@ -52,35 +79,30 @@ export default function WalletSection() {
 
   return (
     <View className="bg-white dark:bg-zinc-900/50 rounded-lg p-4">
-      <View className="flex-row justify-between items-start mb-4">
-        <View>
-          <Text className="text-xs text-gray-400">Connected Wallet</Text>
-          <Text className="font-mono text-xs">{address ? formatAddress(address) : "..."}</Text>
-        </View>
+      <View className="mb-3">
+        <Text className="text-gray-500 dark:text-zinc-400 text-xs">Wallet Address</Text>
+        <Text className="text-gray-800 dark:text-zinc-200 font-mono text-sm">{address ? formatAddress(address) : "..."}</Text>
       </View>
 
-      <Text className="text-xs text-gray-400">USDC Balance (Mock)</Text>
-      <Text className="text-lg font-bold mb-3">
-        {formatCurrency(fromBigInt(balance))}
-      </Text>
+      <View className="mb-4">
+        <Text className="text-gray-500 dark:text-zinc-400 text-xs">USDC Balance</Text>
+        <Text className="text-gray-800 dark:text-zinc-200 font-semibold text-lg">{formatCurrency(fromBigInt(balance || BigInt(0)))}</Text>
+      </View>
 
-      <View className="flex-row gap-2">
+      <View className="flex-row gap-3">
         <TouchableOpacity
-          onPress={handleMint}
-          className="flex-1 bg-yellow-500 p-2 rounded"
+          onPress={() => open()}
+          className="flex-1 bg-gray-100 dark:bg-zinc-800 rounded py-2 px-4"
         >
-          <Text className="text-center font-bold text-black">
-            Mint Mock USDC
-          </Text>
+          <Text className="text-gray-800 dark:text-zinc-200 text-center font-medium">Manage</Text>
         </TouchableOpacity>
 
-        {/* Optional explicit disconnect if W3mButton doesn't cover it fully or for custom UI */}
-        {/* <TouchableOpacity
-          onPress={handleDisconnect}
-          className="bg-red-100 p-2 rounded"
+        <TouchableOpacity
+          onPress={handleMint}
+          className="flex-1 bg-yellow-500 rounded py-2 px-4"
         >
-          <Text className="text-red-500 text-xs">Disconnect</Text>
-        </TouchableOpacity> */}
+          <Text className="text-black text-center font-medium">Mint</Text>
+        </TouchableOpacity>
       </View>
     </View>
   )

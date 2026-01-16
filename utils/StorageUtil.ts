@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 export const storage = {
+    key: 'tm-vault-storage',
     getKeys: async () => {
         const keys = await AsyncStorage.getAllKeys()
         return keys as string[] // Ensure we return strictly string[]

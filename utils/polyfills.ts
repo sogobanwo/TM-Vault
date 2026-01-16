@@ -5,7 +5,7 @@ import 'react-native-url-polyfill/auto'
 import { Buffer } from 'buffer'
 import process from 'process'
 import '@ethersproject/shims'
-import '@walletconnect/react-native-compat' // only AFTER Buffer + process
+import '@walletconnect/react-native-compat' 
 
 // Expose Node globals
 global.Buffer = Buffer

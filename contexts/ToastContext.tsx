@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle, Info } from "lucide-react-native"
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import { Animated, Text, View } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 type ToastType = "success" | "error" | "info"
 
@@ -28,21 +29,18 @@ interface ToastState {
 
 const toastConfig = {
   success: {
-    bgColor: "bg-emerald-500",
-    borderColor: "border-emerald-400",
-    iconColor: "#ffffff",
+    bgColor: "bg-emerald-500", // Used for icon circle bg
+    iconColor: "#10b981", // emerald-500
     Icon: CheckCircle,
   },
   error: {
     bgColor: "bg-red-500",
-    borderColor: "border-red-400",
-    iconColor: "#ffffff",
+    iconColor: "#ef4444", // red-500
     Icon: AlertCircle,
   },
   info: {
-    bgColor: "bg-amber-500",
-    borderColor: "border-amber-400",
-    iconColor: "#ffffff",
+    bgColor: "bg-blue-500",
+    iconColor: "#3b82f6", // blue-500
     Icon: Info,
   },
 }
@@ -56,7 +54,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     key: 0,
   })
 
-  const translateY = useRef(new Animated.Value(-100)).current
+  // Start with +100 (below screen) for bottom positioning
+  const translateY = useRef(new Animated.Value(100)).current
   const opacity = useRef(new Animated.Value(0)).current
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -65,7 +64,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       clearTimeout(timeoutRef.current)
     }
 
-    translateY.setValue(-100)
+    // Reset to initial state (below screen)
+    translateY.setValue(100)
     opacity.setValue(0)
 
     setToast(prev => ({
@@ -96,7 +96,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       timeoutRef.current = setTimeout(() => {
         Animated.parallel([
           Animated.timing(translateY, {
-            toValue: -100,
+            toValue: 100, // Slide back down
             duration: 300,
             useNativeDriver: true,
           }),
@@ -118,6 +118,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }
   }, [toast.key, toast.visible, toast.duration, translateY, opacity])
 
+  const insets = useSafeAreaInsets()
+
   const config = toastConfig[toast.type]
   const IconComponent = config.Icon
 
@@ -130,27 +132,30 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             opacity,
             transform: [{ translateY }],
             position: "absolute",
-            top: 60,
-            left: 16,
-            right: 16,
+            bottom: insets.bottom + 20, // Position at bottom
+            left: 20,
+            right: 20,
             zIndex: 9999,
           }}
           pointerEvents="none"
         >
           <View
-            className={`${config.bgColor} rounded-2xl px-4 py-3 flex-row items-center border ${config.borderColor}`}
+            className="flex-row items-center p-4 rounded-xl"
             style={{
+              backgroundColor: "rgba(20, 20, 25, 0.9)", // Dark transparent background
               shadowColor: "#000",
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: 0.3,
               shadowRadius: 8,
-              elevation: 8,
+              elevation: 5,
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.1)",
             }}
           >
-            <View className="mr-3">
-              <IconComponent size={22} color={config.iconColor} strokeWidth={2.5} />
+            <View className={`mr-3 p-2 rounded-full ${config.bgColor} bg-opacity-20`}>
+              <IconComponent size={20} color={config.iconColor} />
             </View>
-            <Text className="text-white font-semibold text-base flex-1">{toast.message}</Text>
+            <Text className="text-white font-medium text-sm flex-1">{toast.message}</Text>
           </View>
         </Animated.View>
       )}

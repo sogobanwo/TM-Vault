@@ -8,6 +8,7 @@ import { useToast } from "../contexts/ToastContext"
 import { useApproveUSDC, useUSDCAllowance, useUSDCBalance } from "../hooks/useMockUSDC"
 import { useDeposit, usePreviewDeposit } from "../hooks/useTMVault"
 import { contracts } from "../utils/contracts"
+import { formatError } from "../utils/errorFormatter"
 import { formatCurrency, formatShares, fromBigInt } from "../utils/formatters"
 import { VAULT_METADATA } from "../utils/vaults"
 import ConfettiAnimation from "./ConfettiAnimation"
@@ -28,8 +29,8 @@ export default function DepositModal({ route, navigation }: any) {
   const spenderAddress = contracts.tmVault.address
   const { allowance: allowanceBigInt, refetch: refetchAllowance } = useUSDCAllowance(address as `0x${string}` | undefined, spenderAddress)
 
-  const { approve, isLoading: isApproving, isConfirmed: isApproveConfirmed } = useApproveUSDC()
-  const { deposit, isLoading: isDepositing, isConfirmed: isDepositConfirmed, error: depositError } = useDeposit()
+  const { approve, isLoading: isApproving, isConfirmed: isApproveConfirmed, error: approveError, reset: resetApprove } = useApproveUSDC()
+  const { deposit, isLoading: isDepositing, isConfirmed: isDepositConfirmed, error: depositError, reset: resetDeposit } = useDeposit()
 
   const [amount, setAmount] = useState("")
   // We can use previewDeposit to estimate shares
@@ -64,13 +65,25 @@ export default function DepositModal({ route, navigation }: any) {
 
   useEffect(() => {
     if (depositError) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
       showToast("Transaction failed. Please try again.", "error")
-      setErrorTitle("Transaction Failed")
-      setErrorMessage(depositError.message || "An error occurred.")
+      setErrorTitle("Deposit Failed")
+      setErrorMessage(formatError(depositError))
       setShowError(true)
       setStage("input")
     }
   }, [depositError])
+
+  useEffect(() => {
+    if (approveError && stage === "approving") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      showToast("Approval failed. Please try again.", "error")
+      setErrorTitle("Approval Failed")
+      setErrorMessage(formatError(approveError))
+      setShowError(true)
+      setStage("input")
+    }
+  }, [approveError])
 
   if (!vaultMeta) return null
 
@@ -108,6 +121,10 @@ export default function DepositModal({ route, navigation }: any) {
       return
     }
 
+    // Reset any previous errors before starting
+    resetApprove()
+    resetDeposit()
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
 
     // Check allowance
@@ -123,6 +140,8 @@ export default function DepositModal({ route, navigation }: any) {
 
   const handleRetry = () => {
     setShowError(false)
+    resetApprove()
+    resetDeposit()
   }
 
   return (
@@ -136,7 +155,7 @@ export default function DepositModal({ route, navigation }: any) {
           }}
           disabled={stage !== "input"}
         >
-          <Text className="text-amber-700">← Back</Text>
+          <Text className="text-gray-600 dark:text-zinc-400">← Back</Text>
         </TouchableOpacity>
 
         <Text className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Deposit to {vaultMeta.name}</Text>
@@ -198,7 +217,7 @@ export default function DepositModal({ route, navigation }: any) {
         {(stage === "approving" || stage === "depositing") && (
           <View className="flex-1 justify-center items-center py-12">
             <ActivityIndicator size="large" color="#FDC700" />
-            <Text className="text-white mt-6 text-center font-semibold text-lg">
+            <Text className="text-gray-900 dark:text-white mt-6 text-center font-semibold text-lg">
               {stage === "approving" ? "Approving USDC..." : "Processing Deposit..."}
             </Text>
             <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-2 text-center">
@@ -221,7 +240,7 @@ export default function DepositModal({ route, navigation }: any) {
               <Text className="text-white text-center text-lg mb-2">
                 +{formatCurrency(Number.parseFloat(amount || "0"))} in {vaultMeta.name}
               </Text>
-              <Text className="text-amber-700 text-sm text-center">{formatShares(estimatedShares)} shares earned</Text>
+              <Text className="text-yellow-500 text-sm text-center">{formatShares(estimatedShares)} shares earned</Text>
             </View>
           </View>
         </View>

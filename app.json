@@ -52,7 +52,8 @@
         }
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.TMVault"
     },
     "web": {
       "output": "static",
@@ -76,6 +77,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6b43abaf-d9e4-4489-8410-fdccca4027e9"
+      }
     }
   }
 }

@@ -1,6 +1,6 @@
 import { createAppKit } from '@reown/appkit-react-native'
 import { WagmiAdapter } from '@reown/appkit-wagmi-react-native'
-import { baseSepolia } from 'viem/chains'
+import { baseSepolia } from '@reown/appkit/networks'
 import { storage } from './StorageUtil'
 
 const projectId = process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID || ""
@@ -8,7 +8,6 @@ const projectId = process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID || ""
 if (!projectId) {
     throw new Error('Project ID is not defined')
 }
-
 
 const metadata = {
     name: 'TM Vault',
@@ -30,7 +29,8 @@ export const wagmiAdapter = new WagmiAdapter({
 
 export const appKit = createAppKit({
     projectId,
-    networks: networks as any,
+    networks: [...networks],
+    defaultNetwork: baseSepolia,
     adapters: [wagmiAdapter],
     metadata,
     storage

@@ -24,6 +24,13 @@ A mobile crypto investment management application built with React Native and Ex
 - Pull-to-refresh
 - Progress indicators for multi-step transactions
 
+## Screenshots
+
+| Home | Portfolio | Transaction |
+|:---:|:---:|:---:|
+| <img src="assets/screenshots/home-light.jpeg" width="200" alt="Home Light" /> <br/> Light | <img src="assets/screenshots/portfolio-light.jpeg" width="200" alt="Portfolio Light" /> <br/> Light | <img src="assets/screenshots/transaction-light.jpeg" width="200" alt="Transaction Light" /> <br/> Light |
+| <img src="assets/screenshots/home-dark.jpeg" width="200" alt="Home Dark" /> <br/> Dark | <img src="assets/screenshots/portfolio-dark.jpeg" width="200" alt="Portfolio Dark" /> <br/> Dark | <img src="assets/screenshots/transaction-dark.jpeg" width="200" alt="Transaction Dark" /> <br/> Dark |
+
 ## Tech Stack
 
 ### Frontend
@@ -138,6 +145,7 @@ npx expo start
 ```
 
 5. Run on your preferred platform:
+- Press `s` to switch to expo go
 - Press `i` for iOS Simulator
 - Press `a` for Android Emulator
 - Scan QR code with Expo Go app for physical device
@@ -287,13 +295,6 @@ npm run reset-project
 2. Enter your wallet address
 3. Receive test ETH for gas fees
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ## License
 

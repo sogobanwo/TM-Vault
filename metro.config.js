@@ -6,15 +6,12 @@ const config = getDefaultConfig(__dirname)
 
 config.resolver.sourceExts.push("mjs")
 
-// Create path to empty module for Node.js built-ins that don't exist in React Native
 const emptyModule = path.resolve(__dirname, "shims/empty.js")
 
-// Provide Node.js polyfills for packages that need them
 config.resolver.extraNodeModules = {
   ...config.resolver.extraNodeModules,
   stream: require.resolve("readable-stream"),
   crypto: require.resolve("crypto-browserify"),
-  // Mock Node.js modules that ws/viem try to import
   https: emptyModule,
   http: emptyModule,
   net: emptyModule,
@@ -24,9 +21,7 @@ config.resolver.extraNodeModules = {
   path: emptyModule,
 }
 
-// Force browser versions of packages that have Node.js dependencies
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  // Redirect jose to browser build
   if (moduleName === "jose" || moduleName.startsWith("jose/")) {
     const browserPath = moduleName.replace(
       /^jose(\/.*)?$/,
@@ -35,7 +30,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     return context.resolveRequest(context, browserPath, platform)
   }
 
-  // Redirect stream to readable-stream polyfill
   if (moduleName === "stream") {
     return {
       filePath: require.resolve("readable-stream"),
@@ -43,7 +37,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     }
   }
 
-  // Redirect crypto to crypto-browserify
   if (moduleName === "crypto") {
     return {
       filePath: require.resolve("crypto-browserify"),
@@ -51,7 +44,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     }
   }
 
-  // Mock the ws package entirely - React Native has native WebSocket
   if (moduleName === "ws" || moduleName.startsWith("ws/")) {
     return {
       filePath: emptyModule,
@@ -59,7 +51,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     }
   }
 
-  // Mock isows to use native WebSocket
   if (moduleName === "isows" || moduleName.startsWith("isows/")) {
     return {
       filePath: emptyModule,
@@ -67,8 +58,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     }
   }
 
-  // Mock Node.js built-in modules that various packages require
-  // Note: crypto is NOT mocked - react-native-get-random-values provides the polyfill
+  
   const nodeBuiltins = ["https", "http", "net", "tls", "zlib", "fs", "url", "os", "child_process"]
   if (nodeBuiltins.includes(moduleName)) {
     return {

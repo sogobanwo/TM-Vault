@@ -6,6 +6,7 @@ import { parseUnits } from "viem"
 
 import { useToast } from "../contexts/ToastContext"
 import { usePreviewDeposit, useRequestWithdrawal, useUserPosition, VaultType } from "../hooks/useTMVault"
+import { formatError } from "../utils/errorFormatter"
 import { formatCurrency, formatShares, fromBigInt } from "../utils/formatters"
 import { VAULT_METADATA } from "../utils/vaults"
 import ConfettiAnimation from "./ConfettiAnimation"
@@ -22,7 +23,7 @@ export default function WithdrawModal({ route, navigation }: any) {
     const { showToast } = useToast()
     const { position, refetch } = useUserPosition(address as `0x${string}` | undefined)
 
-    const { requestWithdrawal, isLoading: isTxLoading, isConfirmed: isTxConfirmed, error: txError } = useRequestWithdrawal()
+    const { requestWithdrawal, isLoading: isTxLoading, isConfirmed: isTxConfirmed, error: txError, reset: resetWithdrawal } = useRequestWithdrawal()
 
     const [amount, setAmount] = useState("")
     const [stage, setStage] = useState<"input" | "processing" | "success">("input")
@@ -74,10 +75,11 @@ export default function WithdrawModal({ route, navigation }: any) {
     }, [isTxConfirmed])
 
     useEffect(() => {
-        if (txError) {
+        if (txError && stage === "processing") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
             showToast("Withdrawal request failed. Please try again.", "error")
             setErrorTitle("Withdrawal Failed")
-            setErrorMessage(txError.message || "An error occurred.")
+            setErrorMessage(formatError(txError))
             setShowError(true)
             setStage("input")
         }
@@ -114,6 +116,9 @@ export default function WithdrawModal({ route, navigation }: any) {
             return
         }
 
+        // Reset any previous errors before starting
+        resetWithdrawal()
+
         setWithdrawInfo({
             amount: withdrawAmount,
             shares: estimatedShares,
@@ -129,6 +134,7 @@ export default function WithdrawModal({ route, navigation }: any) {
 
     const handleRetry = () => {
         setShowError(false)
+        resetWithdrawal()
     }
 
     return (

@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useEffect } from "react"
 import { parseAbiItem } from "viem"
 import { baseSepolia } from "viem/chains"
 import { contracts } from "../utils/contracts"
@@ -262,7 +261,6 @@ export function useDeposit() {
 
             console.log("[useDeposit] Tx hash:", hash)
             const receipt = await publicClient.waitForTransactionReceipt({ hash })
-            console.log("[useDeposit] Receipt:", receipt)
             return { hash, receipt }
         },
         onSuccess: () => {
@@ -279,7 +277,7 @@ export function useDeposit() {
         deposit,
         hash: mutation.data?.hash,
         isPending: mutation.isPending,
-        isConfirming: mutation.isPending, // Simplifying for now, technically checking receipt is part of mutation
+        isConfirming: mutation.isPending,
         isConfirmed: mutation.isSuccess,
         isLoading: mutation.isPending,
         error: mutation.error,
