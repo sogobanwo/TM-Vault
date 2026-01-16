@@ -8,19 +8,6 @@ interface VaultCardProps {
 }
 
 export default function VaultCard({ vault, onPress }: VaultCardProps) {
-  const getRiskColor = (level: string) => {
-    switch (level) {
-      case "low":
-        return "bg-green-100"
-      case "medium":
-        return "bg-yellow-100"
-      case "high":
-        return "bg-red-100"
-      default:
-        return "bg-gray-100"
-    }
-  }
-
   const getRiskDot = (level: string) => {
     switch (level) {
       case "low":
@@ -32,6 +19,16 @@ export default function VaultCard({ vault, onPress }: VaultCardProps) {
       default:
         return "⚪"
     }
+  }
+
+  const formatLockPeriod = (seconds?: number) => {
+    if (!seconds || seconds === 0) return "No Lock"
+    const days = Math.floor(seconds / 86400)
+    if (days === 1) return "1 Day"
+    if (days > 1) return `${days} Days`
+    const hours = Math.floor(seconds / 3600)
+    if (hours >= 1) return `${hours} Hour${hours > 1 ? "s" : ""}`
+    return "< 1 Hour"
   }
 
   return (
@@ -48,7 +45,7 @@ export default function VaultCard({ vault, onPress }: VaultCardProps) {
         </Text>
       </View>
 
-      <View className="flex-row justify-between">
+      <View className="flex-row justify-between mb-3">
         <View>
           <Text className="text-gray-500 dark:text-zinc-400 text-xs">Your Balance</Text>
           <Text className="text-gray-900 dark:text-zinc-200 font-semibold">{formatCurrency(vault.balance)}</Text>
@@ -56,6 +53,10 @@ export default function VaultCard({ vault, onPress }: VaultCardProps) {
         <View>
           <Text className="text-gray-500 dark:text-zinc-400 text-xs">TVL</Text>
           <Text className="text-gray-900 dark:text-yellow-400 font-semibold">{formatCurrency(vault.tvl)}</Text>
+        </View>
+        <View>
+          <Text className="text-gray-500 dark:text-zinc-400 text-xs">Lock Period</Text>
+          <Text className="text-gray-900 dark:text-zinc-200 font-semibold">{formatLockPeriod(vault.lockPeriod)}</Text>
         </View>
       </View>
     </TouchableOpacity>

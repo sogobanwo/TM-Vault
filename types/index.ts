@@ -7,6 +7,7 @@ export interface Vault {
   tvl: number
   shares: number
   sharePrice: number
+  lockPeriod?: number // Lock period in seconds
 }
 
 export interface UserPosition {

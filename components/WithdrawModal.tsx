@@ -1,139 +1,130 @@
 import * as Haptics from "expo-haptics"
-import { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { useAppStore } from "../store/useAppStore"
-import { formatCurrency, formatShares, truncateNumber } from "../utils/formatters"
-import { MOCK_VAULTS } from "../utils/mockContracts"
+import { parseUnits } from "viem"
+
+import { useToast } from "../contexts/ToastContext"
+import { usePreviewDeposit, useRequestWithdrawal, useUserPosition, VaultType } from "../hooks/useTMVault"
+import { formatCurrency, formatShares, fromBigInt } from "../utils/formatters"
+import { VAULT_METADATA } from "../utils/vaults"
 import ConfettiAnimation from "./ConfettiAnimation"
 import ErrorModal from "./ErrorModal"
 import ProgressBar from "./ProgressBar"
 
+import { useWalletKit } from "../contexts/WalletKitContext"
+
 export default function WithdrawModal({ route, navigation }: any) {
     const { vaultId } = route.params
-    const vault = MOCK_VAULTS.find((v) => v.id === vaultId)
+    const vaultMeta = VAULT_METADATA.find((v) => v.id === vaultId)
 
-    const { positions, setPositions } = useAppStore()
-    const position = positions.find((p) => p.vaultId === vaultId)
+    const { address } = useWalletKit()
+    const { showToast } = useToast()
+    const { position, refetch } = useUserPosition(address as `0x${string}` | undefined)
+
+    const { requestWithdrawal, isLoading: isTxLoading, isConfirmed: isTxConfirmed, error: txError } = useRequestWithdrawal()
 
     const [amount, setAmount] = useState("")
-    const [stage, setStage] = useState<"input" | "pending" | "processing" | "success">("input")
+    const [stage, setStage] = useState<"input" | "processing" | "success">("input")
     const [showConfetti, setShowConfetti] = useState(false)
     const [showError, setShowError] = useState(false)
     const [errorTitle, setErrorTitle] = useState("")
     const [errorMessage, setErrorMessage] = useState("")
     const [txProgress, setTxProgress] = useState(0)
 
-    // Store withdrawal info for success screen (survives position removal)
+    // Store withdrawal info for success screen
     const [withdrawInfo, setWithdrawInfo] = useState<{ amount: number; shares: number; vaultName: string } | null>(null)
 
-    // Only return null if vault is missing - position can be null after successful withdrawal
-    if (!vault) return null
+    // Get user position for this vault
+    let userShares = 0
+    let userValue = 0
 
-    // For input stage, we need a valid position
-    if (!position && stage === "input") {
-        return (
-            <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950 justify-center items-center p-4">
-                <Text className="text-gray-900 dark:text-zinc-50 text-center mb-4">No position found in this vault</Text>
-                <TouchableOpacity className="bg-yellow-500 px-6 py-3 rounded-lg" onPress={() => navigation.goBack()}>
-                    <Text className="text-white font-semibold">Go Back</Text>
-                </TouchableOpacity>
-            </SafeAreaView>
-        )
+    if (position && vaultMeta) {
+        if (vaultMeta.type === VaultType.Stable) {
+            userShares = fromBigInt(position.stableShares)
+            userValue = fromBigInt(position.stableAssets)
+        } else if (vaultMeta.type === VaultType.Growth) {
+            userShares = fromBigInt(position.growthShares)
+            userValue = fromBigInt(position.growthAssets)
+        } else if (vaultMeta.type === VaultType.Turbo) {
+            userShares = fromBigInt(position.turboShares)
+            userValue = fromBigInt(position.turboAssets)
+        }
     }
 
-    const positionValue = position ? (vault.sharePrice || 1) * position.shares : 0
-    const sharesToWithdraw = amount ? truncateNumber(Number.parseFloat(amount) / vault.sharePrice) : 0
+    // Estimate shares to withdraw based on amount (USDC)
+    // To get X assets, we burn Y shares. previewDeposit(assets) gives shares.
+    const amountBigInt = amount ? parseUnits(amount, 6) : 0n
+    const { preview: estimatedSharesBigInt } = usePreviewDeposit(amountBigInt, vaultMeta?.type!)
+    const estimatedShares = fromBigInt(estimatedSharesBigInt)
+
+    if (!vaultMeta) return null
+
+    // Helper to update progress
+    useEffect(() => {
+        if (isTxConfirmed && stage === "processing") {
+            setTxProgress(1)
+            setStage("success")
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+            setShowConfetti(true)
+            setTimeout(() => {
+                navigation.goBack()
+            }, 3000)
+        }
+    }, [isTxConfirmed])
+
+    useEffect(() => {
+        if (txError) {
+            showToast("Withdrawal request failed. Please try again.", "error")
+            setErrorTitle("Withdrawal Failed")
+            setErrorMessage(txError.message || "An error occurred.")
+            setShowError(true)
+            setStage("input")
+        }
+    }, [txError])
+
+    // If no position and input stage
+    if ((!position || userShares <= 0) && stage === "input") {
+        // Maybe just show 0 or loading?
+        // If loading, show spinner.
+        // If loaded and 0, user shouldn't be here or show "No funds".
+    }
 
     const handleQuickAmount = (percentage: number) => {
         Haptics.selectionAsync()
-        const quickAmount = truncateNumber(positionValue * (percentage / 100))
+        const quickAmount = Math.floor(userValue * (percentage / 100) * 100) / 100
         setAmount(quickAmount.toString())
     }
 
     const handleMaxAmount = () => {
         Haptics.selectionAsync()
-        setAmount(positionValue.toString())
+        setAmount(userValue.toString())
     }
 
     const handleWithdraw = async () => {
-        if (!position) return
-
-        try {
-            const withdrawAmount = Number.parseFloat(amount || "0")
-
-            if (withdrawAmount <= 0) {
-                setErrorTitle("Invalid Amount")
-                setErrorMessage("Please enter an amount greater than 0")
-                setShowError(true)
-                return
-            }
-
-            if (withdrawAmount > positionValue) {
-                setErrorTitle("Insufficient Balance")
-                setErrorMessage(`You only have ${formatCurrency(positionValue)} available in this vault`)
-                setShowError(true)
-                return
-            }
-
-            // Store withdrawal info before modifying positions
-            const currentShares = sharesToWithdraw
-            setWithdrawInfo({
-                amount: withdrawAmount,
-                shares: currentShares,
-                vaultName: vault.name
-            })
-
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
-            setStage("pending")
-            setTxProgress(0)
-
-            // Pending state (simulates unlock period)
-            const pendingInterval = setInterval(() => {
-                setTxProgress((prev) => Math.min(prev + 0.1, 0.4))
-            }, 400)
-
-            await new Promise((resolve) => setTimeout(resolve, 2000))
-            clearInterval(pendingInterval)
-
-            setStage("processing")
-            setTxProgress(0.5)
-
-            const processInterval = setInterval(() => {
-                setTxProgress((prev) => Math.min(prev + 0.1, 0.95))
-            }, 400)
-
-            await new Promise((resolve) => setTimeout(resolve, 3000))
-            clearInterval(processInterval)
-
-            // Update positions
-            const newShares = position.shares - currentShares
-            if (newShares <= 0.01) {
-                // Remove position entirely
-                setPositions(positions.filter((p) => p.vaultId !== vaultId))
-            } else {
-                setPositions(
-                    positions.map((p) =>
-                        p.vaultId === vaultId ? { ...p, shares: newShares } : p
-                    )
-                )
-            }
-
-            setTxProgress(1)
-            setStage("success")
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-            setShowConfetti(true)
-
-            setTimeout(() => {
-                navigation.goBack()
-            }, 3000)
-        } catch (error) {
-            setErrorTitle("Withdrawal Failed")
-            setErrorMessage("An error occurred during the withdrawal. Please try again.")
-            setShowError(true)
-            setStage("input")
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+        const withdrawAmount = Number.parseFloat(amount || "0")
+        if (withdrawAmount <= 0) {
+            showToast("Please enter an amount greater than 0", "error")
+            return
         }
+
+        // This check is approximate due to float math.
+        if (withdrawAmount > userValue + 0.1) {
+            showToast(`Insufficient balance. You only have ${formatCurrency(userValue)} available`, "error")
+            return
+        }
+
+        setWithdrawInfo({
+            amount: withdrawAmount,
+            shares: estimatedShares,
+            vaultName: vaultMeta.name
+        })
+
+        setStage("processing")
+        setTxProgress(0.5)
+        showToast("Processing withdrawal request...", "info")
+
+        requestWithdrawal(estimatedSharesBigInt!, vaultMeta.type)
     }
 
     const handleRetry = () => {
@@ -154,12 +145,10 @@ export default function WithdrawModal({ route, navigation }: any) {
                     <Text className="text-gray-600 dark:text-zinc-400">← Back</Text>
                 </TouchableOpacity>
 
-                <Text className="text-3xl font-bold text-gray-900 dark:text-zinc-50 mb-2">Withdraw from {vault.name}</Text>
-                {position && (
-                    <Text className="text-gray-500 dark:text-zinc-400 mb-6">
-                        Available: {formatCurrency(positionValue)} ({formatShares(position.shares)} shares)
-                    </Text>
-                )}
+                <Text className="text-3xl font-bold text-gray-900 dark:text-zinc-50 mb-2">Withdraw from {vaultMeta.name}</Text>
+                <Text className="text-gray-500 dark:text-zinc-400 mb-6">
+                    Available: {formatCurrency(userValue)} ({formatShares(userShares)} shares)
+                </Text>
 
                 {stage === "input" && (
                     <>
@@ -173,26 +162,21 @@ export default function WithdrawModal({ route, navigation }: any) {
                                 keyboardType="decimal-pad"
                                 value={amount}
                                 onChangeText={(text) => {
-                                    const num = Number.parseFloat(text) || 0
-                                    if (num <= positionValue) setAmount(text)
+                                    setAmount(text)
                                 }}
                             />
                             <Text className="text-gray-500 dark:text-zinc-400 text-xs mt-2">
-                                Max: {formatCurrency(positionValue)}
+                                Max: {formatCurrency(userValue)}
                             </Text>
                         </View>
 
                         {/* Quick Amount Buttons */}
                         <View className="flex-row gap-2 mb-6">
-                            <TouchableOpacity className="flex-1 bg-gray-200 dark:bg-zinc-800 rounded py-2" onPress={() => handleQuickAmount(25)}>
-                                <Text className="text-gray-900 dark:text-zinc-200 font-semibold text-center text-sm">25%</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity className="flex-1 bg-gray-200 dark:bg-zinc-800 rounded py-2" onPress={() => handleQuickAmount(50)}>
-                                <Text className="text-gray-900 dark:text-zinc-200 font-semibold text-center text-sm">50%</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity className="flex-1 bg-gray-200 dark:bg-zinc-800 rounded py-2" onPress={() => handleQuickAmount(75)}>
-                                <Text className="text-gray-900 dark:text-zinc-200 font-semibold text-center text-sm">75%</Text>
-                            </TouchableOpacity>
+                            {[25, 50, 75].map(pct => (
+                                <TouchableOpacity key={pct} className="flex-1 bg-gray-200 dark:bg-zinc-800 rounded py-2" onPress={() => handleQuickAmount(pct)}>
+                                    <Text className="text-gray-900 dark:text-zinc-200 font-semibold text-center text-sm">{pct}%</Text>
+                                </TouchableOpacity>
+                            ))}
                             <TouchableOpacity className="flex-1 bg-gray-200 dark:bg-zinc-800 rounded py-2" onPress={handleMaxAmount}>
                                 <Text className="text-gray-900 dark:text-zinc-200 font-semibold text-center text-sm">MAX</Text>
                             </TouchableOpacity>
@@ -201,7 +185,7 @@ export default function WithdrawModal({ route, navigation }: any) {
                         {/* Preview */}
                         <View className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 mb-6 border border-red-200 dark:border-red-800/50">
                             <Text className="text-red-800 dark:text-red-300 text-sm mb-2">Shares to Withdraw</Text>
-                            <Text className="text-red-600 dark:text-red-400 font-bold text-2xl">{formatShares(sharesToWithdraw)}</Text>
+                            <Text className="text-red-600 dark:text-red-400 font-bold text-2xl">{formatShares(estimatedShares)}</Text>
                         </View>
 
                         {/* Withdraw Button */}
@@ -215,14 +199,14 @@ export default function WithdrawModal({ route, navigation }: any) {
                     </>
                 )}
 
-                {(stage === "pending" || stage === "processing") && (
+                {(stage === "processing" || isTxLoading) && (
                     <View className="flex-1 justify-center items-center py-12">
                         <ActivityIndicator size="large" color="#ef4444" />
                         <Text className="text-gray-900 dark:text-zinc-50 mt-6 text-center font-semibold text-lg">
-                            {stage === "pending" ? "Withdrawal Pending..." : "Processing Withdrawal..."}
+                            Processing Request...
                         </Text>
                         <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-2 text-center">
-                            {stage === "pending" ? "Waiting for unlock period" : "Finalizing your withdrawal"}
+                            Submitting withdrawal request to vault
                         </Text>
                         <View className="mt-6 w-full">
                             <ProgressBar progress={txProgress} />
@@ -237,11 +221,13 @@ export default function WithdrawModal({ route, navigation }: any) {
                     <ConfettiAnimation />
                     <View className="flex-1 justify-center items-center">
                         <View className="bg-black/70 rounded-2xl p-8 items-center">
-                            <Text className="text-green-400 text-3xl font-bold text-center mb-4">Withdrawal Complete!</Text>
+                            <Text className="text-green-400 text-3xl font-bold text-center mb-4">Request Sent!</Text>
                             <Text className="text-white text-center text-lg mb-2">
-                                -{formatCurrency(withdrawInfo.amount)} from {withdrawInfo.vaultName}
+                                Requesting {formatCurrency(withdrawInfo.amount)}
                             </Text>
-                            <Text className="text-zinc-400 text-sm text-center">{formatShares(withdrawInfo.shares)} shares redeemed</Text>
+                            <Text className="text-zinc-400 text-sm text-center">
+                                Your withdrawal of {formatShares(withdrawInfo.shares)} shares is pending processing.
+                            </Text>
                         </View>
                     </View>
                 </View>

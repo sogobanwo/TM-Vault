@@ -1,11 +1,12 @@
-// Import required polyfills first
+// 1. First, import polyfills that MUST be initialized before anything else
+import 'react-native-get-random-values';
 import '@ethersproject/shims';
+import '@walletconnect/react-native-compat';
 import { Buffer } from 'buffer';
 import 'fast-text-encoding';
-import 'react-native-get-random-values';
 
-// Set global Buffer
+// 2. Set global Buffer
 global.Buffer = Buffer;
 
-// Then import the expo router
+// 3. Finally, import the expo router entry point
 import 'expo-router/entry';

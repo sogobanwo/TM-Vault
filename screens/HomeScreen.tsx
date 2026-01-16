@@ -1,45 +1,38 @@
-
 import { Ionicons } from "@expo/vector-icons"
 import { useColorScheme } from "nativewind"
-import React, { useEffect, useState } from "react"
+import React, { useCallback, useState } from "react"
 import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-import VaultCard from "../components/VaultCard"
+import { baseSepolia } from "viem/chains"
+
+import VaultCardWrapper from "../components/VaultCardWrapper"
 import WalletSection from "../components/WalletSection"
-import { useAppStore } from "../store/useAppStore"
-import { MOCK_VAULTS } from "../utils/mockContracts"
+import { useUserPosition } from "../hooks/useTMVault"
+import { VAULT_METADATA } from "../utils/vaults"
+
+import { useWalletKit } from "../contexts/WalletKitContext"
 
 export default function HomeScreen({ navigation }: any) {
-  const { wallet, setWallet } = useAppStore()
   const { colorScheme, toggleColorScheme } = useColorScheme()
-  const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    // Initialize wallet from AsyncStorage
-    initializeWallet()
-  }, [])
+  const { address, isConnected, chainId } = useWalletKit()
+  const isCorrectNetwork = chainId === baseSepolia.id
+  const switchChain = (_: any) => console.log("Switch chain not implemented for WalletKit yet")
 
-  const initializeWallet = async () => {
-    try {
-      // Placeholder for AsyncStorage wallet restoration
-      // In real implementation, restore persisted wallet
-    } catch (error) {
-      console.log("[v0] Wallet initialization error:", error)
-    }
-  }
+  // Fetch all user positions once
+  const { position, refetch } = useUserPosition(address as `0x${string}` | undefined)
 
-  const onRefresh = React.useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    // Simulate reloading balances
-    setTimeout(() => {
-      // Mock balance update - in real app, fetch from blockchain
-      if (wallet.isConnected) {
-        setWallet({ usdcBalance: wallet.usdcBalance + Math.random() * 10 })
-      }
+    try {
+      await refetch()
+    } catch (e) {
+      console.error(e)
+    } finally {
       setRefreshing(false)
-    }, 1500)
-  }, [wallet, setWallet])
+    }
+  }, [refetch])
 
   const handleVaultTap = (vaultId: string) => {
     navigation.navigate("deposit", { vaultId })
@@ -57,10 +50,22 @@ export default function HomeScreen({ navigation }: any) {
           <View>
             <Text className="text-3xl font-bold text-yellow-500 dark:text-zinc-50">TM Vault</Text>
             <View className="flex-row items-center mt-2">
-              <View className={`w-2 h-2 rounded-full mr-2 ${wallet.isCorrectNetwork ? "bg-yellow-400" : "bg-red-500"}`} />
+              <View className={`w-2 h-2 rounded-full mr-2 ${!isConnected ? "bg-gray-400" : isCorrectNetwork ? "bg-yellow-400" : "bg-red-500"}`} />
               <Text className="text-sm text-gray-600 dark:text-zinc-400">
-                {wallet.isCorrectNetwork ? "HyperEVM Connected" : "Wrong Network"}
+                {!isConnected
+                  ? "Not Connected"
+                  : isCorrectNetwork
+                    ? "Base Sepolia Connected"
+                    : "Wrong Network"}
               </Text>
+              {isConnected && !isCorrectNetwork && (
+                <TouchableOpacity
+                  className="ml-2 bg-yellow-500 px-3 py-1 rounded-full"
+                  onPress={() => switchChain({ chainId: baseSepolia.id })}
+                >
+                  <Text className="text-xs font-bold text-white">Switch</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
           <TouchableOpacity
@@ -82,8 +87,13 @@ export default function HomeScreen({ navigation }: any) {
         <View className="mt-8 mb-4">
           <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-50 mb-4">Available Vaults</Text>
           <View className="gap-4">
-            {MOCK_VAULTS.map((vault) => (
-              <VaultCard key={vault.id} vault={vault} onPress={() => handleVaultTap(vault.id)} />
+            {VAULT_METADATA.map((vault) => (
+              <VaultCardWrapper
+                key={vault.id}
+                metadata={vault}
+                position={position}
+                onPress={() => handleVaultTap(vault.id)}
+              />
             ))}
           </View>
         </View>

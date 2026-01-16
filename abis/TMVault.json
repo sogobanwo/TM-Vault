@@ -1,0 +1,1173 @@
+[
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_usdc",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
+    },
+    {
+        "inputs": [],
+        "name": "InsufficientBalance",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "InvalidAPYRange",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "InvalidFee",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "NoPendingWithdrawal",
+        "type": "error"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "owner",
+                "type": "address"
+            }
+        ],
+        "name": "OwnableInvalidOwner",
+        "type": "error"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            }
+        ],
+        "name": "OwnableUnauthorizedAccount",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "TransferFailed",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "WithdrawalLocked",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "ZeroAddress",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "ZeroAmount",
+        "type": "error"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "minAPY",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "maxAPY",
+                "type": "uint256"
+            }
+        ],
+        "name": "APYRangeUpdated",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "user",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "assets",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "shares",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "fee",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "timestamp",
+                "type": "uint256"
+            }
+        ],
+        "name": "Deposit",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "depositFee",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "withdrawalFee",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "performanceFee",
+                "type": "uint256"
+            }
+        ],
+        "name": "FeesUpdated",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "previousOwner",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "newOwner",
+                "type": "address"
+            }
+        ],
+        "name": "OwnershipTransferred",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            }
+        ],
+        "name": "Paused",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "timestamp",
+                "type": "uint256"
+            }
+        ],
+        "name": "PerformanceFeesCollected",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            }
+        ],
+        "name": "Unpaused",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "newValue",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "timestamp",
+                "type": "uint256"
+            }
+        ],
+        "name": "VaultRebalanced",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "user",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "shares",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "assets",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "fee",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "timestamp",
+                "type": "uint256"
+            }
+        ],
+        "name": "Withdraw",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "user",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "shares",
+                "type": "uint256"
+            }
+        ],
+        "name": "WithdrawalCancelled",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "user",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "shares",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "requestTime",
+                "type": "uint256"
+            }
+        ],
+        "name": "WithdrawalRequested",
+        "type": "event"
+    },
+    {
+        "inputs": [],
+        "name": "cancelWithdrawal",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "shares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            }
+        ],
+        "name": "convertToAssets",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "assets",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            }
+        ],
+        "name": "convertToShares",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "assets",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            }
+        ],
+        "name": "deposit",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "depositFee",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "token",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256"
+            }
+        ],
+        "name": "emergencyWithdraw",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "executeWithdrawal",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "feeRecipient",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getAllTVL",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "stableTVL",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "growthTVL",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "turboTVL",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "totalTVL",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "user",
+                "type": "address"
+            },
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            }
+        ],
+        "name": "getBalance",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "user",
+                "type": "address"
+            },
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            }
+        ],
+        "name": "getShares",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            }
+        ],
+        "name": "getTVL",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "user",
+                "type": "address"
+            }
+        ],
+        "name": "getUserPosition",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "stableShares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "stableAssets",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "growthShares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "growthAssets",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "turboShares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "turboAssets",
+                "type": "uint256"
+            },
+            {
+                "internalType": "bool",
+                "name": "canWithdrawStable",
+                "type": "bool"
+            },
+            {
+                "internalType": "bool",
+                "name": "canWithdrawGrowth",
+                "type": "bool"
+            },
+            {
+                "internalType": "bool",
+                "name": "canWithdrawTurbo",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            }
+        ],
+        "name": "getVaultStats",
+        "outputs": [
+            {
+                "internalType": "string",
+                "name": "name",
+                "type": "string"
+            },
+            {
+                "internalType": "uint256",
+                "name": "minAPY",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "maxAPY",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "tvl",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "totalShares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "totalDeposits",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "totalWithdrawals_",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "lockPeriod",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "",
+                "type": "uint8"
+            }
+        ],
+        "name": "lastReportedValue",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "owner",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "pause",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "paused",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "name": "pendingWithdrawals",
+        "outputs": [
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            },
+            {
+                "internalType": "uint256",
+                "name": "shares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "requestTime",
+                "type": "uint256"
+            },
+            {
+                "internalType": "bool",
+                "name": "exists",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "performanceFee",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "name": "positions",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "stableShares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "growthShares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "turboShares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "stableDepositTime",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "growthDepositTime",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "turboDepositTime",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "assets",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            }
+        ],
+        "name": "previewDeposit",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "shares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "fee",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "shares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            }
+        ],
+        "name": "previewWithdraw",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "assets",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "fee",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "renounceOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            },
+            {
+                "internalType": "uint256",
+                "name": "currentValue",
+                "type": "uint256"
+            }
+        ],
+        "name": "reportPerformance",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "shares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            }
+        ],
+        "name": "requestWithdrawal",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "",
+                "type": "uint8"
+            }
+        ],
+        "name": "totalPerformanceFees",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "",
+                "type": "uint8"
+            }
+        ],
+        "name": "totalWithdrawals",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "newOwner",
+                "type": "address"
+            }
+        ],
+        "name": "transferOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "unpause",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_minAPY",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_maxAPY",
+                "type": "uint256"
+            }
+        ],
+        "name": "updateAPYRange",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_feeRecipient",
+                "type": "address"
+            }
+        ],
+        "name": "updateFeeRecipient",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_depositFee",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_withdrawalFee",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_performanceFee",
+                "type": "uint256"
+            }
+        ],
+        "name": "updateFees",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_lockPeriod",
+                "type": "uint256"
+            }
+        ],
+        "name": "updateLockPeriod",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "usdc",
+        "outputs": [
+            {
+                "internalType": "contract IERC20",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "",
+                "type": "uint8"
+            }
+        ],
+        "name": "vaults",
+        "outputs": [
+            {
+                "internalType": "string",
+                "name": "name",
+                "type": "string"
+            },
+            {
+                "internalType": "uint256",
+                "name": "minAPY",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "maxAPY",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "lockPeriod",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "totalDeposits",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "totalShares",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "shares",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum TMVault.VaultType",
+                "name": "vaultType",
+                "type": "uint8"
+            }
+        ],
+        "name": "withdraw",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "withdrawalFee",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    }
+]
