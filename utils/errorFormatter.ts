@@ -27,6 +27,21 @@ export function formatError(error: any): string {
         return "Connection session expired. Please reconnect."
     }
 
+    // Unable to open URL - WalletConnect deep link failed
+    if (message.includes("Unable to open URL")) {
+        return "Could not open wallet app. Please ensure your wallet is installed and try again."
+    }
+
+    // Network/timeout errors
+    if (message.includes("timeout") || message.includes("Timeout")) {
+        return "Request timed out. Please check your connection and try again."
+    }
+
+    // Connection errors
+    if (message.includes("network") || message.includes("Network") || message.includes("connection")) {
+        return "Network error. Please check your connection and try again."
+    }
+
     // Try to clean up "MetaMask Tx Signature: ..." prefixes
     if (message.includes(":")) {
         

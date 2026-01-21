@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { parseAbiItem } from "viem"
 import { baseSepolia } from "viem/chains"
 import { contracts } from "../utils/contracts"
+import { safeWalletCall } from "../utils/safeWalletCall"
 
 export enum VaultType {
     Stable = 0,
@@ -251,13 +252,15 @@ export function useDeposit() {
             if (!walletClient || !publicClient || !address) throw new Error("Wallet not connected")
             console.log("[useDeposit] Initiating deposit:", assets.toString(), "VaultType:", vaultType)
 
-            const hash = await walletClient.writeContract({
-                ...contracts.tmVault,
-                functionName: "deposit",
-                args: [assets, vaultType],
-                account: address as `0x${string}`,
-                chain: baseSepolia
-            })
+            const hash = await safeWalletCall(() =>
+                walletClient.writeContract({
+                    ...contracts.tmVault,
+                    functionName: "deposit",
+                    args: [assets, vaultType],
+                    account: address as `0x${string}`,
+                    chain: baseSepolia
+                })
+            )
 
             console.log("[useDeposit] Tx hash:", hash)
             const receipt = await publicClient.waitForTransactionReceipt({ hash })
@@ -266,6 +269,9 @@ export function useDeposit() {
         onSuccess: () => {
             console.log("[useDeposit] Transaction confirmed, invalidating queries...")
             queryClient.invalidateQueries()
+        },
+        onError: (error) => {
+            console.error("[useDeposit] Transaction failed:", error)
         }
     })
 
@@ -294,13 +300,15 @@ export function useRequestWithdrawal() {
             if (!walletClient || !publicClient || !address) throw new Error("Wallet not connected")
             console.log("[useRequestWithdrawal] Initiating withdrawal request:", shares.toString(), "VaultType:", vaultType)
 
-            const hash = await walletClient.writeContract({
-                ...contracts.tmVault,
-                functionName: "requestWithdrawal",
-                args: [shares, vaultType],
-                account: address as `0x${string}`,
-                chain: baseSepolia
-            })
+            const hash = await safeWalletCall(() =>
+                walletClient.writeContract({
+                    ...contracts.tmVault,
+                    functionName: "requestWithdrawal",
+                    args: [shares, vaultType],
+                    account: address as `0x${string}`,
+                    chain: baseSepolia
+                })
+            )
 
             console.log("[useRequestWithdrawal] Tx hash:", hash)
             const receipt = await publicClient.waitForTransactionReceipt({ hash })
@@ -309,6 +317,9 @@ export function useRequestWithdrawal() {
         onSuccess: () => {
             console.log("[useRequestWithdrawal] Transaction confirmed, invalidating queries...")
             queryClient.invalidateQueries()
+        },
+        onError: (error) => {
+            console.error("[useRequestWithdrawal] Transaction failed:", error)
         }
     })
 
@@ -337,12 +348,14 @@ export function useExecuteWithdrawal() {
             if (!walletClient || !publicClient || !address) throw new Error("Wallet not connected")
             console.log("[useExecuteWithdrawal] Executing withdrawal")
 
-            const hash = await walletClient.writeContract({
-                ...contracts.tmVault,
-                functionName: "executeWithdrawal",
-                account: address as `0x${string}`,
-                chain: baseSepolia
-            })
+            const hash = await safeWalletCall(() =>
+                walletClient.writeContract({
+                    ...contracts.tmVault,
+                    functionName: "executeWithdrawal",
+                    account: address as `0x${string}`,
+                    chain: baseSepolia
+                })
+            )
 
             console.log("[useExecuteWithdrawal] Tx hash:", hash)
             const receipt = await publicClient.waitForTransactionReceipt({ hash })
@@ -351,6 +364,9 @@ export function useExecuteWithdrawal() {
         onSuccess: () => {
             console.log("[useExecuteWithdrawal] Transaction confirmed, invalidating queries...")
             queryClient.invalidateQueries()
+        },
+        onError: (error) => {
+            console.error("[useExecuteWithdrawal] Transaction failed:", error)
         }
     })
 
@@ -375,12 +391,14 @@ export function useCancelWithdrawal() {
             if (!walletClient || !publicClient || !address) throw new Error("Wallet not connected")
             console.log("[useCancelWithdrawal] Cancelling withdrawal")
 
-            const hash = await walletClient.writeContract({
-                ...contracts.tmVault,
-                functionName: "cancelWithdrawal",
-                account: address as `0x${string}`,
-                chain: baseSepolia
-            })
+            const hash = await safeWalletCall(() =>
+                walletClient.writeContract({
+                    ...contracts.tmVault,
+                    functionName: "cancelWithdrawal",
+                    account: address as `0x${string}`,
+                    chain: baseSepolia
+                })
+            )
 
             console.log("[useCancelWithdrawal] Tx hash:", hash)
             const receipt = await publicClient.waitForTransactionReceipt({ hash })
@@ -389,6 +407,9 @@ export function useCancelWithdrawal() {
         onSuccess: () => {
             console.log("[useCancelWithdrawal] Transaction confirmed, invalidating queries...")
             queryClient.invalidateQueries()
+        },
+        onError: (error) => {
+            console.error("[useCancelWithdrawal] Transaction failed:", error)
         }
     })
 
@@ -410,78 +431,121 @@ export function useVaultHistory(userAddress?: `0x${string}`) {
     const { data: history = [], isLoading, error, refetch } = useQuery({
         queryKey: ["vaultHistory", userAddress],
         queryFn: async () => {
-            if (!userAddress || !publicClient) return []
+            if (!userAddress || !publicClient) {
+                console.log("[useVaultHistory] Skipping - missing:", { userAddress: !!userAddress, publicClient: !!publicClient })
+                return []
+            }
 
             console.log("[useVaultHistory] Fetching history for:", userAddress)
-            const currentBlock = await publicClient.getBlockNumber()
-            const fromBlock = currentBlock - 50000n > 0n ? currentBlock - 50000n : 0n
+            console.log("[useVaultHistory] Vault contract:", contracts.tmVault.address)
+            console.log("[useVaultHistory] USDC contract:", contracts.mockUsdc.address)
 
-            const [depositLogs, withdrawLogs, requestedLogs, cancelledLogs, incomingLogs, outgoingLogs] = await Promise.all([
-                publicClient.getLogs({
-                    address: contracts.tmVault.address,
-                    event: parseAbiItem('event Deposit(address indexed user, uint8 indexed vaultType, uint256 assets, uint256 shares, uint256 fee, uint256 timestamp)'),
-                    args: { user: userAddress },
-                    fromBlock
-                }),
-                publicClient.getLogs({
-                    address: contracts.tmVault.address,
-                    event: parseAbiItem('event Withdraw(address indexed user, uint8 indexed vaultType, uint256 shares, uint256 assets, uint256 fee, uint256 timestamp)'),
-                    args: { user: userAddress },
-                    fromBlock
-                }),
-                publicClient.getLogs({
-                    address: contracts.tmVault.address,
-                    event: parseAbiItem('event WithdrawalRequested(address indexed user, uint8 indexed vaultType, uint256 shares, uint256 requestTime)'),
-                    args: { user: userAddress },
-                    fromBlock
-                }),
-                publicClient.getLogs({
-                    address: contracts.tmVault.address,
-                    event: parseAbiItem('event WithdrawalCancelled(address indexed user, uint8 indexed vaultType, uint256 shares)'),
-                    args: { user: userAddress },
-                    fromBlock
-                }),
-                publicClient.getLogs({
-                    address: contracts.mockUsdc.address,
-                    event: parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)'),
-                    args: { to: userAddress },
-                    fromBlock
-                }),
-                publicClient.getLogs({
-                    address: contracts.mockUsdc.address,
-                    event: parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)'),
-                    args: { from: userAddress },
-                    fromBlock
+            try {
+                const currentBlock = await publicClient.getBlockNumber()
+                const fromBlock = currentBlock - 50000n > 0n ? currentBlock - 50000n : 0n
+                console.log("[useVaultHistory] Block range:", fromBlock.toString(), "to", currentBlock.toString())
+
+                const [depositLogs, withdrawLogs, requestedLogs, cancelledLogs, incomingLogs, outgoingLogs] = await Promise.all([
+                    publicClient.getLogs({
+                        address: contracts.tmVault.address,
+                        event: parseAbiItem('event Deposit(address indexed user, uint8 indexed vaultType, uint256 assets, uint256 shares, uint256 fee, uint256 timestamp)'),
+                        args: { user: userAddress },
+                        fromBlock
+                    }).catch(e => {
+                        console.error("[useVaultHistory] Failed to fetch deposit logs:", e)
+                        return []
+                    }),
+                    publicClient.getLogs({
+                        address: contracts.tmVault.address,
+                        event: parseAbiItem('event Withdraw(address indexed user, uint8 indexed vaultType, uint256 shares, uint256 assets, uint256 fee, uint256 timestamp)'),
+                        args: { user: userAddress },
+                        fromBlock
+                    }).catch(e => {
+                        console.error("[useVaultHistory] Failed to fetch withdraw logs:", e)
+                        return []
+                    }),
+                    publicClient.getLogs({
+                        address: contracts.tmVault.address,
+                        event: parseAbiItem('event WithdrawalRequested(address indexed user, uint8 indexed vaultType, uint256 shares, uint256 requestTime)'),
+                        args: { user: userAddress },
+                        fromBlock
+                    }).catch(e => {
+                        console.error("[useVaultHistory] Failed to fetch withdrawal requested logs:", e)
+                        return []
+                    }),
+                    publicClient.getLogs({
+                        address: contracts.tmVault.address,
+                        event: parseAbiItem('event WithdrawalCancelled(address indexed user, uint8 indexed vaultType, uint256 shares)'),
+                        args: { user: userAddress },
+                        fromBlock
+                    }).catch(e => {
+                        console.error("[useVaultHistory] Failed to fetch withdrawal cancelled logs:", e)
+                        return []
+                    }),
+                    publicClient.getLogs({
+                        address: contracts.mockUsdc.address,
+                        event: parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)'),
+                        args: { to: userAddress },
+                        fromBlock
+                    }).catch(e => {
+                        console.error("[useVaultHistory] Failed to fetch incoming USDC logs:", e)
+                        return []
+                    }),
+                    publicClient.getLogs({
+                        address: contracts.mockUsdc.address,
+                        event: parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)'),
+                        args: { from: userAddress },
+                        fromBlock
+                    }).catch(e => {
+                        console.error("[useVaultHistory] Failed to fetch outgoing USDC logs:", e)
+                        return []
+                    })
+                ])
+
+                console.log("[useVaultHistory] Logs fetched:", {
+                    deposits: depositLogs.length,
+                    withdraws: withdrawLogs.length,
+                    requested: requestedLogs.length,
+                    cancelled: cancelledLogs.length,
+                    incoming: incomingLogs.length,
+                    outgoing: outgoingLogs.length
                 })
-            ])
 
-            const allEvents = [
-                ...depositLogs.map(l => ({ type: 'Deposit', hash: l.transactionHash, blockNumber: l.blockNumber, ...l.args })),
-                ...withdrawLogs.map(l => ({ type: 'Withdraw', hash: l.transactionHash, blockNumber: l.blockNumber, ...l.args })),
-                ...requestedLogs.map(l => ({ type: 'WithdrawalRequested', hash: l.transactionHash, blockNumber: l.blockNumber, ...l.args })),
-                ...cancelledLogs.map(l => ({ type: 'WithdrawalCancelled', hash: l.transactionHash, blockNumber: l.blockNumber, ...l.args })),
-                ...incomingLogs.map(l => ({ type: 'USDCTransfer', direction: 'in', hash: l.transactionHash, blockNumber: l.blockNumber, ...l.args })),
-                ...outgoingLogs.map(l => ({ type: 'USDCTransfer', direction: 'out', hash: l.transactionHash, blockNumber: l.blockNumber, ...l.args }))
-            ].sort((a, b) => Number(b.blockNumber) - Number(a.blockNumber))
+                const allEvents = [
+                    ...depositLogs.map(l => ({ type: 'Deposit', hash: l.transactionHash, blockNumber: l.blockNumber, ...l.args })),
+                    ...withdrawLogs.map(l => ({ type: 'Withdraw', hash: l.transactionHash, blockNumber: l.blockNumber, ...l.args })),
+                    ...requestedLogs.map(l => ({ type: 'WithdrawalRequested', hash: l.transactionHash, blockNumber: l.blockNumber, ...l.args })),
+                    ...cancelledLogs.map(l => ({ type: 'WithdrawalCancelled', hash: l.transactionHash, blockNumber: l.blockNumber, ...l.args })),
+                    ...incomingLogs.map(l => ({ type: 'USDCTransfer', direction: 'in', hash: l.transactionHash, blockNumber: l.blockNumber, ...l.args })),
+                    ...outgoingLogs.map(l => ({ type: 'USDCTransfer', direction: 'out', hash: l.transactionHash, blockNumber: l.blockNumber, ...l.args }))
+                ].sort((a, b) => Number(b.blockNumber) - Number(a.blockNumber))
 
-            const uniqueBlocks = [...new Set(allEvents.filter(e => !(e as any).timestamp).map(e => e.blockNumber))]
-            const blockTimestamps: Record<string, bigint> = {}
+                console.log("[useVaultHistory] Total events:", allEvents.length)
 
-            await Promise.all(uniqueBlocks.map(async (bn) => {
-                try {
-                    const block = await publicClient.getBlock({ blockNumber: bn })
-                    blockTimestamps[bn.toString()] = block.timestamp
-                } catch (e) {
-                    console.error(`Failed to fetch block ${bn}:`, e)
-                }
-            }))
+                const uniqueBlocks = [...new Set(allEvents.filter(e => !(e as any).timestamp).map(e => e.blockNumber))]
+                const blockTimestamps: Record<string, bigint> = {}
 
-            return allEvents.map((event: any) => ({
-                ...event,
-                timestamp: event.timestamp || blockTimestamps[event.blockNumber.toString()]
-            }))
+                await Promise.all(uniqueBlocks.map(async (bn) => {
+                    try {
+                        const block = await publicClient.getBlock({ blockNumber: bn })
+                        blockTimestamps[bn.toString()] = block.timestamp
+                    } catch (e) {
+                        console.error(`[useVaultHistory] Failed to fetch block ${bn}:`, e)
+                    }
+                }))
+
+                return allEvents.map((event: any) => ({
+                    ...event,
+                    timestamp: event.timestamp || blockTimestamps[event.blockNumber.toString()]
+                }))
+            } catch (e) {
+                console.error("[useVaultHistory] Error fetching history:", e)
+                throw e
+            }
         },
-        enabled: !!userAddress && !!publicClient
+        enabled: !!userAddress && !!publicClient,
+        retry: 2,
+        staleTime: 30000, // Consider data stale after 30 seconds
     })
 
     return { history: history as any[], isLoading, error, refetch }

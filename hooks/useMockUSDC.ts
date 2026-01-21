@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useWalletKit } from "../contexts/WalletKitContext"
 import { contracts } from "../utils/contracts"
 import { baseSepolia } from "viem/chains"
+import { safeWalletCall } from "../utils/safeWalletCall"
 
 export function useMintUSDC() {
     const queryClient = useQueryClient()
@@ -11,13 +12,15 @@ export function useMintUSDC() {
         mutationFn: async ({ to, amount }: { to: `0x${string}`, amount: bigint }) => {
             if (!walletClient || !publicClient || !address) throw new Error("Wallet not connected")
 
-            const hash = await walletClient.writeContract({
-                ...contracts.mockUsdc,
-                functionName: "mint",
-                args: [to, amount],
-                account: address as `0x${string}`,
-                chain: baseSepolia
-            })
+            const hash = await safeWalletCall(() =>
+                walletClient.writeContract({
+                    ...contracts.mockUsdc,
+                    functionName: "mint",
+                    args: [to, amount],
+                    account: address as `0x${string}`,
+                    chain: baseSepolia
+                })
+            )
 
             const receipt = await publicClient.waitForTransactionReceipt({ hash })
             return { hash, receipt }
@@ -25,6 +28,9 @@ export function useMintUSDC() {
         onSuccess: () => {
             console.log("[useMintUSDC] Transaction confirmed, invalidating queries...")
             queryClient.invalidateQueries()
+        },
+        onError: (error) => {
+            console.error("[useMintUSDC] Transaction failed:", error)
         }
     })
 
@@ -52,13 +58,15 @@ export function useApproveUSDC() {
         mutationFn: async ({ spender, amount }: { spender: `0x${string}`, amount: bigint }) => {
             if (!walletClient || !publicClient || !address) throw new Error("Wallet not connected")
 
-            const hash = await walletClient.writeContract({
-                ...contracts.mockUsdc,
-                functionName: "approve",
-                args: [spender, amount],
-                account: address as `0x${string}`,
-                chain: baseSepolia
-            })
+            const hash = await safeWalletCall(() =>
+                walletClient.writeContract({
+                    ...contracts.mockUsdc,
+                    functionName: "approve",
+                    args: [spender, amount],
+                    account: address as `0x${string}`,
+                    chain: baseSepolia
+                })
+            )
 
             const receipt = await publicClient.waitForTransactionReceipt({ hash })
             return { hash, receipt }
@@ -66,6 +74,9 @@ export function useApproveUSDC() {
         onSuccess: () => {
             console.log("[useApproveUSDC] Transaction confirmed, invalidating queries...")
             queryClient.invalidateQueries()
+        },
+        onError: (error) => {
+            console.error("[useApproveUSDC] Transaction failed:", error)
         }
     })
 

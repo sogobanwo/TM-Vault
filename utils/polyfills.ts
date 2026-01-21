@@ -5,7 +5,7 @@ import 'react-native-url-polyfill/auto'
 import { Buffer } from 'buffer'
 import process from 'process'
 import '@ethersproject/shims'
-import '@walletconnect/react-native-compat' 
+import '@walletconnect/react-native-compat'
 
 // Expose Node globals
 global.Buffer = Buffer
@@ -20,3 +20,7 @@ if (typeof atob === 'undefined') {
         return new Buffer(b64Encoded, 'base64').toString('binary')
     }
 }
+
+// Setup global error handlers for WalletConnect errors
+import { setupGlobalErrorHandlers } from './safeWalletCall'
+setupGlobalErrorHandlers()

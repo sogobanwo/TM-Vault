@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics"
-import React, { useEffect, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { parseUnits } from "viem"
@@ -14,6 +14,9 @@ import ErrorModal from "./ErrorModal"
 import ProgressBar from "./ProgressBar"
 
 import { useWalletKit } from "../contexts/WalletKitContext"
+
+// Timeout duration for transactions (2 minutes)
+const TRANSACTION_TIMEOUT = 120000
 
 export default function WithdrawModal({ route, navigation }: any) {
     const { vaultId } = route.params
@@ -35,6 +38,45 @@ export default function WithdrawModal({ route, navigation }: any) {
 
     // Store withdrawal info for success screen
     const [withdrawInfo, setWithdrawInfo] = useState<{ amount: number; shares: number; vaultName: string } | null>(null)
+
+    // Ref to track timeout for stuck transactions
+    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    // Clear timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current)
+                timeoutRef.current = null
+            }
+        }
+    }, [])
+
+    // Helper to show error and reset state
+    const handleError = useCallback((title: string, error: any) => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+        showToast(`${title}. Please try again.`, "error")
+        setErrorTitle(title)
+        setErrorMessage(formatError(error))
+        setShowError(true)
+        setStage("input")
+        setTxProgress(0)
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current)
+            timeoutRef.current = null
+        }
+    }, [showToast])
+
+    // Start timeout when entering loading states
+    const startTransactionTimeout = useCallback(() => {
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current)
+        }
+        timeoutRef.current = setTimeout(() => {
+            handleError("Transaction Timeout", { message: "Withdrawal request is taking too long. Please try again." })
+            resetWithdrawal()
+        }, TRANSACTION_TIMEOUT)
+    }, [handleError, resetWithdrawal])
 
     // Get user position for this vault
     let userShares = 0
@@ -64,6 +106,11 @@ export default function WithdrawModal({ route, navigation }: any) {
     // Helper to update progress
     useEffect(() => {
         if (isTxConfirmed && stage === "processing") {
+            // Clear any pending timeout
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current)
+                timeoutRef.current = null
+            }
             setTxProgress(1)
             setStage("success")
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
@@ -72,25 +119,26 @@ export default function WithdrawModal({ route, navigation }: any) {
                 navigation.goBack()
             }, 3000)
         }
-    }, [isTxConfirmed])
+    }, [isTxConfirmed, stage, navigation])
 
     useEffect(() => {
         if (txError && stage === "processing") {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-            showToast("Withdrawal request failed. Please try again.", "error")
-            setErrorTitle("Withdrawal Failed")
-            setErrorMessage(formatError(txError))
-            setShowError(true)
-            setStage("input")
+            handleError("Withdrawal Failed", txError)
         }
-    }, [txError])
+    }, [txError, stage, handleError])
 
-    // If no position and input stage
-    if ((!position || userShares <= 0) && stage === "input") {
-        // Maybe just show 0 or loading?
-        // If loading, show spinner.
-        // If loaded and 0, user shouldn't be here or show "No funds".
-    }
+    // Safety check: if we're in a loading state but mutation is not pending, reset
+    useEffect(() => {
+        if (stage === "processing" && !isTxLoading && !isTxConfirmed && !txError) {
+            const safetyTimeout = setTimeout(() => {
+                if (stage === "processing" && !isTxLoading && !isTxConfirmed) {
+                    handleError("Withdrawal Failed", { message: "Transaction was interrupted. Please try again." })
+                    resetWithdrawal()
+                }
+            }, 5000) // Give 5 seconds grace period
+            return () => clearTimeout(safetyTimeout)
+        }
+    }, [stage, isTxLoading, isTxConfirmed, txError])
 
     const handleQuickAmount = (percentage: number) => {
         Haptics.selectionAsync()
@@ -118,6 +166,7 @@ export default function WithdrawModal({ route, navigation }: any) {
 
         // Reset any previous errors before starting
         resetWithdrawal()
+        setShowError(false)
 
         setWithdrawInfo({
             amount: withdrawAmount,
@@ -127,14 +176,31 @@ export default function WithdrawModal({ route, navigation }: any) {
 
         setStage("processing")
         setTxProgress(0.5)
+        startTransactionTimeout()
         showToast("Processing withdrawal request...", "info")
 
-        requestWithdrawal(estimatedSharesBigInt!, vaultMeta.type)
+        try {
+            requestWithdrawal(estimatedSharesBigInt!, vaultMeta.type)
+        } catch (error) {
+            handleError("Withdrawal Failed", error)
+        }
     }
 
     const handleRetry = () => {
         setShowError(false)
+        setTxProgress(0)
         resetWithdrawal()
+    }
+
+    const handleCancel = () => {
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current)
+            timeoutRef.current = null
+        }
+        resetWithdrawal()
+        setStage("input")
+        setTxProgress(0)
+        showToast("Transaction cancelled", "info")
     }
 
     return (
@@ -214,9 +280,18 @@ export default function WithdrawModal({ route, navigation }: any) {
                         <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-2 text-center">
                             Submitting withdrawal request to vault
                         </Text>
+                        <Text className="text-gray-400 dark:text-zinc-500 text-xs mt-1 text-center">
+                            Please confirm in your wallet app
+                        </Text>
                         <View className="mt-6 w-full">
                             <ProgressBar progress={txProgress} />
                         </View>
+                        <TouchableOpacity
+                            className="mt-8 px-6 py-3 border border-gray-300 dark:border-zinc-600 rounded-lg"
+                            onPress={handleCancel}
+                        >
+                            <Text className="text-gray-600 dark:text-zinc-400 text-center">Cancel</Text>
+                        </TouchableOpacity>
                     </View>
                 )}
             </ScrollView>

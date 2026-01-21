@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics"
-import React, { useEffect, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { parseUnits } from "viem"
@@ -17,6 +17,9 @@ import ProgressBar from "./ProgressBar"
 
 import { useWalletKit } from "../contexts/WalletKitContext"
 
+// Timeout duration for transactions (2 minutes)
+const TRANSACTION_TIMEOUT = 120000
+
 export default function DepositModal({ route, navigation }: any) {
   const { vaultId } = route.params
   const vaultMeta = VAULT_METADATA.find((v) => v.id === vaultId)
@@ -25,7 +28,7 @@ export default function DepositModal({ route, navigation }: any) {
   const { showToast } = useToast()
   const { balance: usdcBalanceBigInt } = useUSDCBalance(address as `0x${string}` | undefined)
 
-  // Need Vault Address for allowance check. contracts.tmVault.address
+  // Need Vault Address for allowance check
   const spenderAddress = contracts.tmVault.address
   const { allowance: allowanceBigInt, refetch: refetchAllowance } = useUSDCAllowance(address as `0x${string}` | undefined, spenderAddress)
 
@@ -37,22 +40,80 @@ export default function DepositModal({ route, navigation }: any) {
   const amountBigInt = amount ? parseUnits(amount, 6) : 0n
   const { preview: estimatedSharesBigInt } = usePreviewDeposit(amountBigInt, vaultMeta?.type!)
 
-  const [stage, setStage] = useState<"input" | "approving" | "depositing" | "success">("input")
+  // Stages: input -> approving -> approved -> depositing -> success
+  const [stage, setStage] = useState<"input" | "approving" | "approved" | "depositing" | "success">("input")
   const [showConfetti, setShowConfetti] = useState(false)
   const [showError, setShowError] = useState(false)
   const [errorTitle, setErrorTitle] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
   const [txProgress, setTxProgress] = useState(0)
 
-  // Effects for success states
+  // Ref to track timeout for stuck transactions
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Clear timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    }
+  }, [])
+
+  // Helper to show error and reset state
+  const handleError = useCallback((title: string, error: any) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+    showToast(`${title}. Please try again.`, "error")
+    setErrorTitle(title)
+    setErrorMessage(formatError(error))
+    setShowError(true)
+    setStage("input")
+    setTxProgress(0)
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+  }, [showToast])
+
+  // Start timeout when entering loading states
+  const startTransactionTimeout = useCallback((stageName: string) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    timeoutRef.current = setTimeout(() => {
+      handleError("Transaction Timeout", { message: `${stageName} is taking too long. Please try again.` })
+      resetApprove()
+      resetDeposit()
+    }, TRANSACTION_TIMEOUT)
+  }, [handleError, resetApprove, resetDeposit])
+
+  // Handle approval success - move to "approved" stage instead of auto-depositing
   useEffect(() => {
     if (isApproveConfirmed && stage === "approving") {
-      handleDeposit()
+      // Clear the approval timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+      // Refetch allowance and move to approved stage
+      refetchAllowance().finally(() => {
+        setTxProgress(0.5)
+        setStage("approved")
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+        showToast("USDC approved! Now tap Deposit to continue.", "success")
+      })
     }
-  }, [isApproveConfirmed])
+  }, [isApproveConfirmed, stage, refetchAllowance, showToast])
 
+  // Handle deposit success
   useEffect(() => {
     if (isDepositConfirmed && stage === "depositing") {
+      // Clear any pending timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
       setTxProgress(1)
       setStage("success")
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
@@ -61,34 +122,53 @@ export default function DepositModal({ route, navigation }: any) {
         navigation.goBack()
       }, 3000)
     }
-  }, [isDepositConfirmed])
+  }, [isDepositConfirmed, stage, navigation])
 
+  // Handle deposit errors
   useEffect(() => {
-    if (depositError) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      showToast("Transaction failed. Please try again.", "error")
-      setErrorTitle("Deposit Failed")
-      setErrorMessage(formatError(depositError))
-      setShowError(true)
-      setStage("input")
+    if (depositError && stage === "depositing") {
+      handleError("Deposit Failed", depositError)
     }
-  }, [depositError])
+  }, [depositError, stage, handleError])
 
+  // Handle approval errors
   useEffect(() => {
     if (approveError && stage === "approving") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      showToast("Approval failed. Please try again.", "error")
-      setErrorTitle("Approval Failed")
-      setErrorMessage(formatError(approveError))
-      setShowError(true)
-      setStage("input")
+      handleError("Approval Failed", approveError)
     }
-  }, [approveError])
+  }, [approveError, stage, handleError])
+
+  // Safety check for approving stage
+  useEffect(() => {
+    if (stage === "approving" && !isApproving && !isApproveConfirmed && !approveError) {
+      const safetyTimeout = setTimeout(() => {
+        if (stage === "approving" && !isApproving && !isApproveConfirmed) {
+          handleError("Approval Failed", { message: "Transaction was interrupted. Please try again." })
+          resetApprove()
+        }
+      }, 5000)
+      return () => clearTimeout(safetyTimeout)
+    }
+  }, [stage, isApproving, isApproveConfirmed, approveError, handleError, resetApprove])
+
+  // Safety check for depositing stage
+  useEffect(() => {
+    if (stage === "depositing" && !isDepositing && !isDepositConfirmed && !depositError) {
+      const safetyTimeout = setTimeout(() => {
+        if (stage === "depositing" && !isDepositing && !isDepositConfirmed) {
+          handleError("Deposit Failed", { message: "Transaction was interrupted. Please try again." })
+          resetDeposit()
+        }
+      }, 5000)
+      return () => clearTimeout(safetyTimeout)
+    }
+  }, [stage, isDepositing, isDepositConfirmed, depositError, handleError, resetDeposit])
 
   if (!vaultMeta) return null
 
   const usdcBalance = fromBigInt(usdcBalanceBigInt)
   const estimatedShares = fromBigInt(estimatedSharesBigInt)
+  const needsApproval = (allowanceBigInt || 0n) < (amount ? parseUnits(amount, 6) : 0n)
 
   const handleQuickAmount = (percentage: number) => {
     Haptics.selectionAsync()
@@ -101,15 +181,8 @@ export default function DepositModal({ route, navigation }: any) {
     setAmount(usdcBalance.toString())
   }
 
-  const handleDeposit = () => {
-    if (!vaultMeta) return
-    const depositAmount = parseUnits(amount, 6)
-    setStage("depositing")
-    setTxProgress(0.5) // Indeterminate
-    deposit(depositAmount, vaultMeta.type)
-  }
-
-  const handleApproveAndDeposit = async () => {
+  // Handle the approve button click
+  const handleApprove = async () => {
     const depositAmount = parseUnits(amount || "0", 6)
     if (depositAmount <= 0n) {
       showToast("Please enter an amount greater than 0", "error")
@@ -124,24 +197,72 @@ export default function DepositModal({ route, navigation }: any) {
     // Reset any previous errors before starting
     resetApprove()
     resetDeposit()
+    setShowError(false)
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
 
-    // Check allowance
-    if ((allowanceBigInt || 0n) < depositAmount) {
-      setStage("approving")
-      setTxProgress(0.2)
-      showToast("Requesting USDC approval...", "info")
+    setStage("approving")
+    setTxProgress(0.2)
+    startTransactionTimeout("Approval")
+    showToast("Requesting USDC approval...", "info")
+
+    try {
       approve(spenderAddress, depositAmount)
-    } else {
-      handleDeposit()
+    } catch (error) {
+      handleError("Approval Failed", error)
+    }
+  }
+
+  // Handle the deposit button click (called from approved stage or input if already approved)
+  const handleDeposit = () => {
+    if (!vaultMeta) return
+
+    const depositAmount = parseUnits(amount || "0", 6)
+    if (depositAmount <= 0n) {
+      showToast("Please enter an amount greater than 0", "error")
+      return
+    }
+
+    if (depositAmount > (usdcBalanceBigInt || 0n)) {
+      showToast(`Insufficient funds. You only have ${formatCurrency(usdcBalance)} available`, "error")
+      return
+    }
+
+    // Reset deposit state
+    resetDeposit()
+    setShowError(false)
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+
+    setStage("depositing")
+    setTxProgress(0.7)
+    startTransactionTimeout("Deposit")
+    showToast("Processing deposit...", "info")
+
+    try {
+      deposit(depositAmount, vaultMeta.type)
+    } catch (error) {
+      handleError("Deposit Failed", error)
     }
   }
 
   const handleRetry = () => {
     setShowError(false)
+    setTxProgress(0)
     resetApprove()
     resetDeposit()
+  }
+
+  const handleCancel = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+    resetApprove()
+    resetDeposit()
+    setStage("input")
+    setTxProgress(0)
+    showToast("Transaction cancelled", "info")
   }
 
   return (
@@ -201,31 +322,126 @@ export default function DepositModal({ route, navigation }: any) {
               <Text className="text-gray-900 dark:text-yellow-400 font-bold text-2xl">{formatShares(estimatedShares)}</Text>
             </View>
 
-            {/* Approve Button */}
-            <TouchableOpacity
-              className="bg-yellow-500 dark:bg-yellow-400 rounded-lg py-4 mb-3 disabled:opacity-50 shadow-md"
-              onPress={handleApproveAndDeposit}
-              disabled={!amount || Number.parseFloat(amount) <= 0}
-            >
-              <Text className="text-white dark:text-black font-bold text-center text-lg">
-                {(allowanceBigInt || 0n) < (amount ? parseUnits(amount, 6) : 0n) ? "Approve & Deposit" : "Deposit"}
-              </Text>
-            </TouchableOpacity>
+            {/* Action Button - Approve or Deposit depending on allowance */}
+            {needsApproval ? (
+              <TouchableOpacity
+                className="bg-yellow-500 dark:bg-yellow-400 rounded-lg py-4 mb-3 disabled:opacity-50 shadow-md"
+                onPress={handleApprove}
+                disabled={!amount || Number.parseFloat(amount) <= 0}
+              >
+                <Text className="text-white dark:text-black font-bold text-center text-lg">
+                  Approve USDC
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                className="bg-yellow-500 dark:bg-yellow-400 rounded-lg py-4 mb-3 disabled:opacity-50 shadow-md"
+                onPress={handleDeposit}
+                disabled={!amount || Number.parseFloat(amount) <= 0}
+              >
+                <Text className="text-white dark:text-black font-bold text-center text-lg">
+                  Deposit
+                </Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
 
-        {(stage === "approving" || stage === "depositing") && (
+        {/* Approving Stage */}
+        {stage === "approving" && (
           <View className="flex-1 justify-center items-center py-12">
             <ActivityIndicator size="large" color="#FDC700" />
             <Text className="text-gray-900 dark:text-white mt-6 text-center font-semibold text-lg">
-              {stage === "approving" ? "Approving USDC..." : "Processing Deposit..."}
+              Approving USDC...
             </Text>
             <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-2 text-center">
-              {stage === "approving" ? "Confirming token approval" : "Finalizing your deposit"}
+              Confirming token approval
+            </Text>
+            <Text className="text-gray-400 dark:text-zinc-500 text-xs mt-1 text-center">
+              Please confirm in your wallet app
             </Text>
             <View className="mt-6 w-full">
               <ProgressBar progress={txProgress} />
             </View>
+            <TouchableOpacity
+              className="mt-8 px-6 py-3 border border-gray-300 dark:border-zinc-600 rounded-lg"
+              onPress={handleCancel}
+            >
+              <Text className="text-gray-600 dark:text-zinc-400 text-center">Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Approved Stage - User manually triggers deposit */}
+        {stage === "approved" && (
+          <View className="flex-1 justify-center items-center py-12">
+            <View className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 items-center justify-center mb-4">
+              <Text className="text-3xl">✓</Text>
+            </View>
+            <Text className="text-gray-900 dark:text-white mt-2 text-center font-semibold text-lg">
+              USDC Approved!
+            </Text>
+            <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-2 text-center px-8">
+              Your tokens are approved. Tap the button below to complete your deposit.
+            </Text>
+
+            {/* Preview */}
+            <View className="bg-gray-100 dark:bg-zinc-800 rounded-lg p-4 mt-6 w-full border border-gray-200 dark:border-zinc-700">
+              <View className="flex-row justify-between mb-2">
+                <Text className="text-gray-500 dark:text-zinc-400 text-sm">Amount</Text>
+                <Text className="text-gray-900 dark:text-white font-semibold">{formatCurrency(Number.parseFloat(amount || "0"))}</Text>
+              </View>
+              <View className="flex-row justify-between">
+                <Text className="text-gray-500 dark:text-zinc-400 text-sm">Estimated Shares</Text>
+                <Text className="text-yellow-600 dark:text-yellow-400 font-semibold">{formatShares(estimatedShares)}</Text>
+              </View>
+            </View>
+
+            <View className="mt-6 w-full">
+              <ProgressBar progress={txProgress} />
+            </View>
+
+            {/* Deposit Button */}
+            <TouchableOpacity
+              className="mt-6 w-full bg-yellow-500 dark:bg-yellow-400 rounded-lg py-4 shadow-md"
+              onPress={handleDeposit}
+            >
+              <Text className="text-white dark:text-black font-bold text-center text-lg">
+                Deposit Now
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="mt-4 px-6 py-3 border border-gray-300 dark:border-zinc-600 rounded-lg"
+              onPress={handleCancel}
+            >
+              <Text className="text-gray-600 dark:text-zinc-400 text-center">Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Depositing Stage */}
+        {stage === "depositing" && (
+          <View className="flex-1 justify-center items-center py-12">
+            <ActivityIndicator size="large" color="#FDC700" />
+            <Text className="text-gray-900 dark:text-white mt-6 text-center font-semibold text-lg">
+              Processing Deposit...
+            </Text>
+            <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-2 text-center">
+              Finalizing your deposit
+            </Text>
+            <Text className="text-gray-400 dark:text-zinc-500 text-xs mt-1 text-center">
+              Please confirm in your wallet app
+            </Text>
+            <View className="mt-6 w-full">
+              <ProgressBar progress={txProgress} />
+            </View>
+            <TouchableOpacity
+              className="mt-8 px-6 py-3 border border-gray-300 dark:border-zinc-600 rounded-lg"
+              onPress={handleCancel}
+            >
+              <Text className="text-gray-600 dark:text-zinc-400 text-center">Cancel</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
